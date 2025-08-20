@@ -1,66 +1,82 @@
-.earthquakeMap {
-    height: 600px;
+.container {
+    display: flex;
     width: 100%;
-	position: relative;
+    height: 600px;
+}
+
+.earthquakeMap {
+    flex: 1;
+    position: relative;
+}
+
+.left-container {
+    width: 350px;
+    height: 95%;
+    background-color: white;
+    padding: 15px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    border: 1px solid #e0e0e0;
+    display: flex;
+    flex-direction: column;
+}
+
+.resizer {
+    width: 2px;
+    background: #ccc;
+    cursor: ew-resize;
+    z-index: 1000;
+}
+
+.resizer:hover {
+    background: #aac5e1;
 }
 
 .ol-popup {
-	position: absolute;
-	background-color: white;
-	-webkit-filter: drop-shadow(0 1px 4px rgba(0,0,0,0.2));
-	filter: drop-shadow(0 1px 4px rgba(0,0,0,0.2));
-	padding: 15px;
-	border-radius: 10px;
-	border: 1px solid #ccc;
-	bottom: 12px;
-	left: -50px;
-	min-width: 280px;
+    position: absolute;
+    background-color: white;
+    -webkit-filter: drop-shadow(0 1px 4px rgba(0,0,0,0.2));
+    filter: drop-shadow(0 1px 4px rgba(0,0,0,0.2));
+    padding: 15px;
+    border-radius: 10px;
+    border: 1px solid #ccc;
+    bottom: 12px;
+    left: -50px;
+    min-width: 280px;
+    z-index: 1000;
 }
 .ol-popup:after, .ol-popup:before {
-	top: 100%;
-	border: solid transparent;
-	content: " ";
-	height: 0;
-	width: 0;
-	position: absolute;
-	pointer-events: none;
+    top: 100%;
+    border: solid transparent;
+    content: " ";
+    height: 0;
+    width: 0;
+    position: absolute;
+    pointer-events: none;
 }
 .ol-popup:after {
-	border-color: rgba(255, 255, 255, 0);
-	border-top-color: white;
-	border-width: 10px;
-	left: 48px;
-	margin-left: -10px;
+    border-color: rgba(255, 255, 255, 0);
+    border-top-color: white;
+    border-width: 10px;
+    left: 48px;
+    margin-left: -10px;
 }
 .ol-popup:before {
-	border-color: rgba(204, 204, 204, 0);
-	border-top-color: #cccccc;
-	border-width: 11px;
-	left: 48px;
-	margin-left: -11px;
+    border-color: rgba(204, 204, 204, 0);
+    border-top-color: #cccccc;
+    border-width: 11px;
+    left: 48px;
+    margin-left: -11px;
 }
 .ol-popup-closer {
-	text-decoration: none;
-	position: absolute;
-	top: 2px;
-	right: 8px;
+    text-decoration: none;
+    position: absolute;
+    top: 2px;
+    right: 8px;
 }
 .ol-popup-closer:after {
-	content: "✖";
+    content: "✖";
 }
 
-/* Style for the filter container */
-.filter-container {
-    position: absolute;
-    top: 80px;
-    right: 10px;
-    background-color: white;
-    padding: 5px;
-    border-radius: 4px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
-}
-
-/* Style for the layer control container */
 .layer-control {
     position: absolute;
     top: 10px;
@@ -69,44 +85,179 @@
     padding: 10px;
     border-radius: 4px;
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+    z-index: 1000;
 }
 
-/* Style for the time slider */
-.slider-container {
-    position: absolute;
-    bottom: 10px;
-    left: 10px;
-    background-color: white;
-    padding: 10px;
+.date-selector {
+    margin-bottom: 15px;
+}
+
+.alert-wrapper {
+    position: relative;
+    margin-bottom: 15px;
+}
+
+.alert-selector {
     display: flex;
-    flex-direction: column;
-    align-items: left;
+    align-items: center;
+}
+
+.info-btn {
+    margin-left: 8px;
+    background: none;
+    border: 1px solid #808080;
+    border-radius: 50%;
+    color: #808080;
+    cursor: pointer;
+    font-size: 13px;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.3s;
+}
+
+.info-btn:hover {
+    background-color: #e7f1ff;
+}
+
+.pager-tooltip {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    background-color: white;
+    border: 1px solid #ccc;
+    padding: 15px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    z-index: 3000;
+    font-size: 12px;
+    border-radius: 6px;
+    width: 100%;
+}
+
+.alert-wrapper:hover .pager-tooltip {
+    display: block;
+}
+
+.pager-tooltip h3 {
+    font-size: 14px;
+    margin: 0 0 10px 0;
+}
+
+.pager-tooltip table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.pager-tooltip th, .pager-tooltip td {
+    border: 1px solid #ccc;
+    padding: 6px;
+    text-align: left;
+}
+
+.list-title {
+    margin: 0 0 15px 0;
+    font-size: 18px;
+    color: #333;
+    border-bottom: 2px solid #007bff;
+    padding-bottom: 5px;
+}
+
+.earthquake-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    background-color: #f8f9fa;
     border-radius: 4px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+    overflow-y: auto;
+    flex: 1;
 }
 
-#sliderLabel {
-    margin-bottom: 5px;
+.eq-item {
+    display: flex;
+    padding: 10px;
+    border-bottom: 1px solid #e0e0e0;
+    cursor: pointer;
+    transition: background-color 0.2s;
 }
 
-/* Style for the reference chart */
-.reference-container {
+.eq-item.header {
+    position: sticky;
+    top: 0;
+    font-weight: bold;
+    background: #e9ecef;
+    border-bottom: 2px solid #dee2e6;
+    z-index: 10;
+}
+
+.eq-item:hover {
+    background: #e7f1ff;
+}
+
+.eq-item .location {
+    flex: 2;
+    padding-right: 10px;
+}
+
+.eq-item .magnitude {
+    flex: 1;
+    text-align: right;
+    font-weight: 500;
+}
+
+.eq-item small {
+    font-size: 0.8em;
+    color: #6c757d;
+}
+
+.selected {
+    background: #d0e7ff;
+    border-left: 3px solid #007bff;
+
+}
+.map-credit {
     position: absolute;
     bottom: 10px;
     right: 10px;
-    background-color: white;
-    border: 1px solid #ccc;
-    padding: 5px;
+    background-color: rgba(255, 255, 255, 0.8);
+    padding: 2px 5px;
+    font-size: 12px;
+    color: #333;
+    z-index: 1000;
 }
 
-.expand-btn {
-    position: absolute;
-    bottom: 0px; /* Adjust this value to position the button below the layer control */
-    right: 0px;
-    background-color: white;
-    border: 1px solid #ccc;
-    cursor: pointer;
-    padding: 5px;
-    z-index: 9999; /* Ensure the button is on top of other elements */
-	display: true
+@media (max-width: 768px) {
+    .container {
+        flex-direction: column;
+        height: 97vh;
+        width: 97vw;
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+
+    .earthquakeMap {
+        order: 1;
+        height: 30%;
+        width: 100%;
+        border-radius: 8px 8px 0 0;
+        margin: 0;
+    }
+
+    .left-container {
+        order: 2;
+        height: 70%;
+        width: 100%;
+        border-radius: 0 0 8px 8px;
+        margin: 0;
+        padding: 10px;
+        box-sizing: border-box;
+    }
+
+    .resizer {
+        display: none;
+    }
 }

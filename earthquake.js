@@ -1,7 +1,12 @@
-// Initialize Map
 let map, popup, popupContent;
-let tectonicLayer0, tectonicLayer1;
-let earthquakeData = null;
+let tectonicLayer0, tectonicLayer1, faultLayer;
+let selectedFeature = null;
+let selectedItem = null;
+let fromDateInput, toDateInput, alertDropdown;
+
+const options = { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Hong_Kong', timeZoneName: 'short' };
+const defaultCenter = ol.proj.fromLonLat([114.1095, 22.3964]); // Hong Kong
+const defaultZoom = 2;
 
 document.addEventListener('DOMContentLoaded', () => {
     // Initialize the OpenLayers map, centered on Hong Kong
@@ -13,8 +18,8 @@ document.addEventListener('DOMContentLoaded', () => {
             })
         ],
         view: new ol.View({
-            center: ol.proj.fromLonLat([114.1095, 22.3964]), // Coordinates for Hong Kong
-            zoom: 2 // Initial zoom level
+            center: defaultCenter,
+            zoom: defaultZoom
         })
     });
 
@@ -41,25 +46,136 @@ document.addEventListener('DOMContentLoaded', () => {
         return false;
     };
 
+    // Single click event for map
+    map.on('singleclick', function (evt) {
+        popup.setPosition(undefined);
+        const feature = map.forEachFeatureAtPixel(evt.pixel, function (f) {
+            return f;
+        }, {
+            layerFilter: function (layer) {
+                return layer.get('name') === 'earthquakeLayer';
+            }
+        });
+
+        if (feature) {
+            const coordinates = feature.getGeometry().getCoordinates();
+            popupContent.innerHTML = `<div style="font-size: 1.2em;"><strong>${feature.get('title')}</strong></div>
+                                      <hr>
+                                      <div style="font-size: 0.8em;">${feature.get('formattedTime')}</div>`;
+            popup.setPosition(coordinates);
+
+            // Flash feature
+            if (selectedFeature) {
+                selectedFeature.set('flash', false);
+                selectedFeature.set('selected', false);
+                selectedFeature.changed();
+            }
+            feature.set('selected', true);
+            flashFeature(feature);
+            selectedFeature = feature;
+
+            // Highlight list item
+            const id = feature.get('eqId');
+            if (selectedItem) {
+                selectedItem.classList.remove('selected');
+            }
+            const item = document.querySelector(`[data-eqid="${id}"]`);
+            if (item) {
+                item.classList.add('selected');
+                selectedItem = item;
+                item.scrollIntoView({ behavior: 'smooth' });
+            }
+        } else {
+            // Unselect and reset map view
+            if (selectedFeature) {
+                selectedFeature.set('flash', false);
+                selectedFeature.set('selected', false);
+                selectedFeature.changed();
+                selectedFeature = null;
+            }
+            if (selectedItem) {
+                selectedItem.classList.remove('selected');
+                selectedItem = null;
+            }
+            map.getView().animate({
+                center: defaultCenter,
+                zoom: defaultZoom
+            });
+        }
+    });
+
+    // Update list on map move
+    map.on('moveend', () => {
+        updateEarthquakeList();
+    });
+
     // Call functions to add layers and controls
     fetchTectonicPlateData();
     fetchFaultLayer();
-    createDropdownFilter();
     createLayerVisibilityControl();
-    createTimeslider();
-    createReferenceChart();
-    
+    createLeftControls();
+
     // Initial fetch of earthquake data for the last 30 days
-    const [startDate, endDate] = getDateRange('6');
-    fetchEarthquakeData(null, startDate, endDate);
+    fetchEarthquakeData('', null, null);
+
+    // Resizer functionality
+    const resizer = document.getElementById('resizer');
+    let isResizing = false;
+    let initialWidth = 0;
+    let initialMouseX = 0;
+
+    resizer.addEventListener('mousedown', (e) => {
+        e.preventDefault(); // Prevent text selection during drag
+        isResizing = true;
+        const leftContainer = document.querySelector('.left-container');
+        initialWidth = parseFloat(getComputedStyle(leftContainer).width);
+        initialMouseX = e.clientX;
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', stopResizing);
+    });
+
+    function handleMouseMove(e) {
+        if (!isResizing) return;
+        const container = document.querySelector('.container');
+        const containerRect = container.getBoundingClientRect();
+        const deltaX = e.clientX - initialMouseX;
+        const newWidth = initialWidth + deltaX;
+        const minWidth = 200; // Minimum width for left-container
+        const maxWidth = containerRect.width - 200; // Minimum width for earthquakeMap
+        if (newWidth >= minWidth && newWidth <= maxWidth) {
+            document.querySelector('.left-container').style.width = `${newWidth}px`;
+        }
+    }
+
+    function stopResizing() {
+        isResizing = false;
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', stopResizing);
+        map.updateSize(); // Update map size after resizing
+    }
 });
 
+// Function to flash the feature
+const flashFeature = (feature) => {
+    feature.set('flash', true);
+    feature.changed();
+    let flashCount = 0;
+    const flashInterval = setInterval(() => {
+        feature.set('flash', !feature.get('flash'));
+        feature.changed();
+        flashCount++;
+        if (flashCount >= 6) {
+            clearInterval(flashInterval);
+            feature.set('flash', false);
+            feature.set('selected', true); // Maintain selection
+            feature.changed();
+        }
+    }, 300);
+};
 
-
-
-// Fecth Tectonic Plate
+// Fetch Tectonic Plate
 const fetchTectonicPlateData = () => {
-    tectonicLayer0 = new ol.layer.Vector({ // Initialize global variable
+    tectonicLayer0 = new ol.layer.Vector({
         source: new ol.source.Vector({
             loader: function (extent, resolution, projection) {
                 const url = 'https://services.arcgis.com/jIL9msH9OI208GCb/arcgis/rest/services/Tectonic_Plates_and_Boundaries/FeatureServer/0/query/?f=json&where=1%3D1&returnGeometry=true&spatialRel=esriSpatialRelIntersects&outFields=*&outSR=102100&inSR=102100';
@@ -80,7 +196,7 @@ const fetchTectonicPlateData = () => {
         })
     });
 
-    tectonicLayer1 = new ol.layer.Vector({ // Initialize global variable
+    tectonicLayer1 = new ol.layer.Vector({
         source: new ol.source.Vector({
             loader: function (extent, resolution, projection) {
                 const url = 'https://services.arcgis.com/jIL9msH9OI208GCb/arcgis/rest/services/Tectonic_Plates_and_Boundaries/FeatureServer/1/query/?f=json&where=1%3D1&returnGeometry=true&spatialRel=esriSpatialRelIntersects&outFields=*&outSR=102100&inSR=102100';
@@ -104,20 +220,19 @@ const fetchTectonicPlateData = () => {
                     color: '#000'
                 })
             });
-            
             return new ol.style.Style({
                 text: labelStyle
             });
         }
     });
-	
+    
     map.addLayer(tectonicLayer0);
     map.addLayer(tectonicLayer1);
 };
 
-// Fecth Fault Layer
+// Fetch Fault Layer
 const fetchFaultLayer = () => {
-    faultLayer = new ol.layer.Vector({ // Initialize global variable
+    faultLayer = new ol.layer.Vector({
         source: new ol.source.Vector({
             loader: function (extent, resolution, projection) {
                 const url = 'https://services.arcgis.com/jIL9msH9OI208GCb/arcgis/rest/services/Active_Faults/FeatureServer/0/query/?f=json&where=1%3D1&returnGeometry=true&spatialRel=esriSpatialRelIntersects&outFields=*&outSR=102100&inSR=102100';
@@ -141,12 +256,17 @@ const fetchFaultLayer = () => {
 };
 
 // Fetch Earthquake Data
-const fetchEarthquakeData = async (alertLevel, startDate, endDate) => {
-    try {
-        const response = await fetch('https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson');
-        const earthquake = await response.json();
+let allEarthquakes = []; // Store all fetched earthquakes
+const fetchEarthquakeData = async (alertLevel, inputStartDate, inputEndDate) => {
+    const today = new Date();
+    const thirtyDaysAgo = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 30);
+    const startDate = inputStartDate || thirtyDaysAgo;
+    const endDate = inputEndDate || today;
 
-        // console.log('Fetched Earthquake Data:', earthquake);
+    try {
+        const url = `https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=${startDate.toISOString()}&endtime=${endDate.toISOString()}`;
+        const response = await fetch(url);
+        const earthquake = await response.json();
 
         // Clear existing earthquake layers
         const layersToRemove = [];
@@ -157,6 +277,9 @@ const fetchEarthquakeData = async (alertLevel, startDate, endDate) => {
         });
         layersToRemove.forEach((layer) => map.removeLayer(layer));
 
+        const vectorSource = new ol.source.Vector();
+        allEarthquakes = [];
+
         // Process each earthquake feature
         earthquake.features.forEach((featureData) => {
             const { mag, place, time, alert, title } = featureData.properties;
@@ -166,16 +289,9 @@ const fetchEarthquakeData = async (alertLevel, startDate, endDate) => {
             if (alert !== null && (!alertLevel || alert === alertLevel)) {
                 const eventTime = new Date(time);
 
-                // Log event time and date range for debugging
-                // console.log('Event Time:', eventTime);
-                // console.log('Start Date:', startDate);
-                // console.log('End Date:', endDate);
-
                 // Filter by date range
                 if (eventTime >= startDate && eventTime <= endDate) {
-                    const options = { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Hong_Kong', timeZoneName: 'short' };
                     const formattedTime = eventTime.toLocaleString('en-HK', options);
-                    
                     let color;
                     switch (alert) {
                         case 'green':
@@ -191,107 +307,142 @@ const fetchEarthquakeData = async (alertLevel, startDate, endDate) => {
                             color = 'red';
                             break;
                         default:
-                            color = 'gray'; // Default color if alert level is unknown
+                            color = 'gray';
                     }
 
                     const feature = new ol.Feature({
                         geometry: new ol.geom.Point(ol.proj.fromLonLat([lon, lat])),
-                        name: `Location: ${place}<br>Magnitude: ${mag}<br>Time: ${formattedTime}`
                     });
+                    feature.set('eqId', featureData.id);
+                    feature.set('alertColor', color);
+                    feature.set('mag', mag);
+                    feature.set('place', place);
+                    feature.set('time', time);
+                    feature.set('title', title);
+                    feature.set('formattedTime', formattedTime);
+                    feature.set('flash', false);
+                    feature.set('selected', false);
 
-                    const hollowCircleRadius = mag;
-                    const hollowCircleStyle = new ol.style.Style({
-                        image: new ol.style.Circle({
-                            radius: hollowCircleRadius,
-                            stroke: new ol.style.Stroke({
-                                color: color,
-                                width: 2.5
-                            }),
-                            fill: new ol.style.Fill({
-                                color: 'rgba(255, 0, 0, 0.0)'
-                            })
-                        })
-                    });
+                    vectorSource.addFeature(feature);
 
-                    // const filledCircleRadius = mag;
-                    // const filledCircleStyle = new ol.style.Style({
-                        // image: new ol.style.Circle({
-                            // radius: filledCircleRadius,
-                            // fill: new ol.style.Fill({
-                                // color: color
-                            // })
-                        // })
-                    // });
-
-                    feature.setStyle([hollowCircleStyle]);
-
-                    const vectorSource = new ol.source.Vector({
-                        features: [feature]
-                    });
-
-                    const vectorLayer = new ol.layer.Vector({
-                        source: vectorSource,
-                        name: 'earthquakeLayer'
-                    });
-
-                    map.addLayer(vectorLayer);
-
-                    map.on('singleclick', function (evt) {
-                        map.forEachFeatureAtPixel(evt.pixel, function (clickedFeature) {
-                            if (clickedFeature === feature) {
-                                const coordinates = clickedFeature.getGeometry().getCoordinates();
-                                popupContent.innerHTML = `<div style="font-size: 1.2em;"><strong>${title}</strong></div>
-                                                          <hr>
-                                                          <div style="font-size: 0.8em;">${formattedTime}</div>`
-                                popup.setPosition(coordinates);
-                            }
-                        });
+                    allEarthquakes.push({
+                        id: featureData.id,
+                        mag,
+                        place,
+                        alert,
+                        lon,
+                        lat,
+                        feature,
+                        formattedTime
                     });
                 }
             }
+        });
+
+        const vectorLayer = new ol.layer.Vector({
+            source: vectorSource,
+            name: 'earthquakeLayer',
+            style: function (feature) {
+                const color = feature.get('alertColor');
+                const radius = feature.get('mag');
+                return new ol.style.Style({
+                    image: new ol.style.Circle({
+                        radius: feature.get('flash') ? radius * 1.5 : radius,
+                        stroke: new ol.style.Stroke({
+                            color: color,
+                            width: feature.get('flash') ? 4 : (feature.get('selected') ? 3 : 2.5)
+                        }),
+                        fill: new ol.style.Fill({
+                            color: feature.get('flash') ? 'rgba(255, 255, 255, 0.5)' : (feature.get('selected') ? 'rgba(255, 255, 255, 0.3)' : 'rgba(255, 0, 0, 0.0)')
+                        })
+                    })
+                });
+            }
+        });
+
+        map.addLayer(vectorLayer);
+
+        // Update list based on current map extent
+        updateEarthquakeList();
+
+        // Reset map view to default
+        map.getView().animate({
+            center: defaultCenter,
+            zoom: defaultZoom
         });
     } catch (error) {
         console.error('Error fetching earthquake data:', error);
     }
 };
 
-
-
-
-
-// Create Dropdown
-const createDropdownFilter = () => {
-    const filterContainer = document.createElement('div');
-    filterContainer.className = 'filter-container';
-
-    const dropdown = document.createElement('select');
-    dropdown.id = 'alertDropdown';
-    const options = [
-        { value: '', text: 'All Alerts' },
-        { value: 'green', text: 'Green Alert' },
-        { value: 'yellow', text: 'Yellow Alert' },
-        { value: 'orange', text: 'Orange Alert' },
-        { value: 'red', text: 'Red Alert' }
-    ];
-
-    options.forEach(optionData => {
-        const option = document.createElement('option');
-        option.value = optionData.value;
-        option.text = optionData.text;
-        dropdown.appendChild(option);
-    });
-
-	dropdown.onchange = async function () {
-		const timeslider = document.getElementById('timeslider');
-		const sliderValue = timeslider ? timeslider.value : '6';
-		const [startDate, endDate] = getDateRange(sliderValue);
-
-		await fetchEarthquakeData(this.value, startDate, endDate);
-	};
-
-    filterContainer.appendChild(dropdown);
-    document.getElementById('earthquakeMap').appendChild(filterContainer); // Append to the body for visibility
-}
+// Update Earthquake List based on map extent
+const updateEarthquakeList = () => {
+    const extent = map.getView().calculateExtent(map.getSize());
+    const listUl = document.getElementById('eq-list');
+    listUl.innerHTML = `
+        <li class="eq-item header">
+            <span class="location">Location</span>
+            <span class="magnitude">Magnitude</span>
+        </li>
+    `;
+    allEarthquakes
+        .filter(eq => {
+            const coords = ol.proj.fromLonLat([eq.lon, eq.lat]);
+            return ol.extent.containsXY(extent, coords[0], coords[1]);
+        })
+        .sort((a, b) => b.mag - a.mag)
+        .forEach(eq => {
+            const li = document.createElement('li');
+            li.className = 'eq-item';
+            li.innerHTML = `
+                <span class="location">${eq.place}<br><small>${eq.formattedTime}</small></span>
+                <span class="magnitude">${eq.mag}</span>
+            `;
+            li.dataset.eqid = eq.id;
+            li.onclick = () => {
+                if (selectedItem === li) {
+                    // Unselect
+                    li.classList.remove('selected');
+                    selectedItem = null;
+                    if (selectedFeature) {
+                        selectedFeature.set('flash', false);
+                        selectedFeature.set('selected', false);
+                        selectedFeature.changed();
+                        selectedFeature = null;
+                    }
+                    map.getView().animate({
+                        center: defaultCenter,
+                        zoom: defaultZoom
+                    });
+                } else {
+                    // Select
+                    if (selectedItem) {
+                        selectedItem.classList.remove('selected');
+                    }
+                    li.classList.add('selected');
+                    selectedItem = li;
+                    if (selectedFeature) {
+                        selectedFeature.set('flash', false);
+                        selectedFeature.set('selected', false);
+                        selectedFeature.changed();
+                    }
+                    eq.feature.set('selected', true);
+                    flashFeature(eq.feature);
+                    selectedFeature = eq.feature;
+                    const coord = ol.proj.fromLonLat([eq.lon, eq.lat]);
+                    map.getView().animate({
+                        center: coord,
+                        zoom: 8
+                    });
+                }
+            };
+            listUl.appendChild(li);
+            if (selectedFeature && eq.id === selectedFeature.get('eqId')) {
+                li.classList.add('selected');
+                selectedItem = li;
+            }
+        });
+};
 
 // Create Layer Visibility Control
 const createLayerVisibilityControl = () => {
@@ -311,7 +462,7 @@ const createLayerVisibilityControl = () => {
     tectonicLabel.textContent = 'Tectonic Plates';
     layerControl.appendChild(tectonicCheckbox);
     layerControl.appendChild(tectonicLabel);
-    layerControl.appendChild(document.createElement('br')); // Add line break
+    layerControl.appendChild(document.createElement('br'));
 
     // Checkbox for Fault Layer
     const faultCheckbox = document.createElement('input');
@@ -326,131 +477,150 @@ const createLayerVisibilityControl = () => {
     layerControl.appendChild(faultCheckbox);
     layerControl.appendChild(faultLabel);
 
-    document.getElementById('earthquakeMap').appendChild(layerControl); // Append to the body for visibility
+    document.getElementById('earthquakeMap').appendChild(layerControl);
 };
 
-// Create Timeslider
-const getDateRange = (value) => {
-    const now = new Date();
-    let startDate;
+// Create Left Controls
+const createLeftControls = () => {
+    const leftContainer = document.querySelector('.left-container');
 
-    switch(value) {
-        case '1': // 1 day
-            startDate = new Date(now.getTime() - (24 * 60 * 60 * 1000));
-            break;
-        case '2': // 3 days
-            startDate = new Date(now.getTime() - (3 * 24 * 60 * 60 * 1000));
-            break;
-        case '3': // 5 days
-            startDate = new Date(now.getTime() - (5 * 24 * 60 * 60 * 1000));
-            break;
-        case '4': // 7 days
-            startDate = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
-            break;
-        case '5': // 14 days
-            startDate = new Date(now.getTime() - (14 * 24 * 60 * 60 * 1000));
-            break;
-        case '6': // 30 days
-            startDate = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
-            break;
-        default:
-            startDate = new Date(now.getTime() - (1 * 24 * 60 * 60 * 1000)); // Default to 1 day
-    }
-    return [startDate, now];
-};
+    // Earthquake list title
+    const listTitle = document.createElement('h4');
+    listTitle.textContent = 'Earthquakes List';
+    listTitle.className = 'list-title';
+    leftContainer.appendChild(listTitle);
 
-// Create Time slider
-const createTimeslider = () => {
-    const sliderContainer = document.createElement('div');
-    sliderContainer.className = 'slider-container';
+    // Date selectors
+    const dateDiv = document.createElement('div');
+    dateDiv.className = 'date-selector';
 
-    const sliderLabel = document.createElement('label');
-    sliderLabel.id = 'sliderLabel';
-    sliderLabel.innerText = 'Last 30 days';
+    const fromLabel = document.createElement('label');
+    fromLabel.textContent = 'From: ';
+    const fromDate = document.createElement('input');
+    fromDate.type = 'date';
+    fromDateInput = fromDate;
 
-    const timeslider = document.createElement('input');
-    timeslider.type = 'range';
-    timeslider.id = 'timeslider';
-    timeslider.min = '1';
-    timeslider.max = '6';
-    timeslider.step = '1';
-    timeslider.value = '6';
+    const toLabel = document.createElement('label');
+    toLabel.textContent = ' To: ';
+    const toDate = document.createElement('input');
+    toDate.type = 'date';
+    toDateInput = toDate;
 
-    sliderContainer.appendChild(sliderLabel);
-    sliderContainer.appendChild(timeslider);
-    document.getElementById('earthquakeMap').appendChild(sliderContainer);
+    const today = new Date();
+    const thirtyDaysAgo = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 30);
+    const formatDate = (date) => date.toISOString().split('T')[0];
 
-    // Event listener for the time slider
-    timeslider.addEventListener('input', async (event) => {
-        const sliderValue = event.target.value;
-        const [startDate, endDate] = getDateRange(sliderValue);
+    fromDate.min = formatDate(thirtyDaysAgo);
+    fromDate.max = formatDate(today);
+    fromDate.value = formatDate(thirtyDaysAgo);
 
-        const labels = ['Yesterday', 'Last 3 days', 'Last 5 days', 'Last 7 days', 'Last 14 days', 'Last 30 days'];
-        sliderLabel.innerText = labels[sliderValue - 1];
+    toDate.min = formatDate(thirtyDaysAgo);
+    toDate.max = formatDate(today);
+    toDate.value = formatDate(today);
 
-        const dropdown = document.getElementById('alertDropdown');
-        const alertLevel = dropdown ? dropdown.value : null;
+    dateDiv.appendChild(fromLabel);
+    dateDiv.appendChild(fromDate);
+    dateDiv.appendChild(toLabel);
+    dateDiv.appendChild(toDate);
+    leftContainer.appendChild(dateDiv);
 
-        await fetchEarthquakeData(alertLevel, startDate, endDate);
+    // Alert wrapper for selector and reference chart
+    const alertWrapper = document.createElement('div');
+    alertWrapper.className = 'alert-wrapper';
+
+    // Alert selector
+    const alertDiv = document.createElement('div');
+    alertDiv.className = 'alert-selector';
+
+    const alertLabel = document.createElement('label');
+    alertLabel.textContent = 'Alert Level: ';
+    const dropdown = document.createElement('select');
+    alertDropdown = dropdown;
+    const alertOptions = [
+        { value: '', text: 'All Alerts' },
+        { value: 'green', text: 'Green Alert' },
+        { value: 'yellow', text: 'Yellow Alert' },
+        { value: 'orange', text: 'Orange Alert' },
+        { value: 'red', text: 'Red Alert' }
+    ];
+
+    alertOptions.forEach(optionData => {
+        const option = document.createElement('option');
+        option.value = optionData.value;
+        option.text = optionData.text;
+        dropdown.appendChild(option);
     });
-};
 
-// Create Reference Chart
-const createReferenceChart = () => {
+    alertDiv.appendChild(alertLabel);
+    alertDiv.appendChild(dropdown);
+
+    const infoBtn = document.createElement('button');
+    infoBtn.className = 'info-btn';
+    infoBtn.textContent = '?';
+    alertDiv.appendChild(infoBtn);
+    alertWrapper.appendChild(alertDiv);
+
+    // Reference chart
     const referenceContainer = document.createElement('div');
-    referenceContainer.className = 'reference-container';
+    referenceContainer.className = 'pager-tooltip';
     referenceContainer.innerHTML = `
         <div class="reference-content">
             <h3>The PAGER Earthquake Impact Scale</h3>
             <table>
                 <thead>
                     <tr>
-                        <th>Alert Level and Color</th>
-                        <th>Estimated Fatalities</th>
-                        <th>Estimated Losses (USD)</th>
+                        <th>Alert Level</th>
+                        <th>Fatalities</th>
+                        <th>Losses (USD)</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr>
                         <td style="color: red;">Red</td>
                         <td>1,000+</td>
-                        <td>$1 billion+</td>
+                        <td>$1B+</td>
                     </tr>
                     <tr>
                         <td style="color: orange;">Orange</td>
-                        <td>100 - 999</td>
-                        <td>$100 million - $1 billion</td>
+                        <td>100–999</td>
+                        <td>$100M–$1B</td>
                     </tr>
                     <tr>
                         <td style="color: yellow;">Yellow</td>
-                        <td>1 - 99</td>
-                        <td>$1 million - $100 million</td>
+                        <td>1–99</td>
+                        <td>$1M–$100M</td>
                     </tr>
                     <tr>
                         <td style="color: green;">Green</td>
                         <td>0</td>
-                        <td>&lt; $1 million</td>
+                        <td>&lt; $1M</td>
                     </tr>
                 </tbody>
             </table>
         </div>
-        <span class="expand-btn">&lt;</span>
     `;
+    alertWrapper.appendChild(referenceContainer);
 
-    document.getElementById('earthquakeMap').appendChild(referenceContainer);
+    leftContainer.appendChild(alertWrapper);
 
-    const expandBtn = referenceContainer.querySelector('.expand-btn');
-    const referenceContent = referenceContainer.querySelector('.reference-content');
+    // Earthquake list
+    const listUl = document.createElement('ul');
+    listUl.id = 'eq-list';
+    listUl.className = 'earthquake-list';
+    leftContainer.appendChild(listUl);
 
-    expandBtn.addEventListener('click', () => {
-        if (referenceContent.style.display === 'none' || referenceContent.style.display === '') {
-            referenceContent.style.display = 'block';
-            expandBtn.innerText = '>';
-        } else {
-            referenceContent.style.display = 'none';
-            expandBtn.innerText = '<';
+    // Event listeners
+    const updateData = async () => {
+        let start = new Date(fromDateInput.value);
+        let end = new Date(toDateInput.value);
+        end.setHours(23, 59, 59, 999);
+        if (start > end) {
+            start = end;
         }
-    });
+        await fetchEarthquakeData(alertDropdown.value, start, end);
+    };
 
-    referenceContent.style.display = 'none'; // Initially hide the content
+    fromDate.onchange = updateData;
+    toDate.onchange = updateData;
+    dropdown.onchange = updateData;
 };

@@ -4,12 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Earthquake Map</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@latest/ol.css" />
-    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v7.3.0/ol.css">
+    <script src="https://cdn.jsdelivr.net/npm/ol@v7.3.0/dist/ol.js"></script>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div id="earthquakeMap" class="earthquakeMap"></div>
-    <script src="https://cdn.jsdelivr.net/npm/ol@latest/dist/ol.js"></script>
+    <div class="container">
+        <div class="left-container"></div>
+        <div class="resizer" id="resizer"></div>
+        <div id="earthquakeMap" class="earthquakeMap">
+        </div>
+    </div>
     <script src="earthquake.js"></script>
 </body>
 </html>
